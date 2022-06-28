@@ -1,34 +1,36 @@
-package cache.image.zimageloader
+package cache.image.zimageloaderlib
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Handler
 import android.os.Looper
 import android.widget.ImageView
+import cache.image.zimageloaderlib.singleton.SingletonHolder
 import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.properties.Delegates
 
 /*
 *
-* TODO (1) -> We can change our quality as we want (Builder Pattern).
-* TODO (2) -> We can use of Drawable images and not caching it but display it ASAP.
-* TODO (3) -> We should improve our thread working theory and using Flow and power of coroutine.
+* TODO (1) -> We should improve our thread working theory and using Flow and power of coroutine.
 *
 * @Created by Zeyad Alsayed
 * */
-class ImageLoader constructor(
-    private val fileCache: FileCache
+class ImageLoaderSingleton constructor(
+    private val fileCache: FileCacheSingleton
 ) {
     //Create Map (collection) to store image and image url in key value pair
     private val imageViews = Collections.synchronizedMap(WeakHashMap<ImageView, String>())
     private var executorService: ExecutorService? = null
 
     //handler to display images in UI thread
-    var handler = Handler(Looper.myLooper()!!)
+    private var handler = Handler(Looper.myLooper()!!)
+
+    companion object : SingletonHolder<ImageLoaderSingleton, FileCacheSingleton>(::ImageLoaderSingleton)
 
     init {
         /*
@@ -39,30 +41,39 @@ class ImageLoader constructor(
     }
 
     // default image show in list (Before online image download)
-    private val imagePlaceHolder: Int? = null//R.drawable.app_icon
+    private var imagePlaceHolder by Delegates.notNull<Int>()
 
-    fun displayImage(url: String, imageView: ImageView?) {
+    fun displayImage(url: String? = null, imagePlaceHolder: Int? = null, quality: Int = 85, imageView: ImageView?) {
         //Store image and url in Map
-        imageViews[imageView] = url
+        imagePlaceHolder?.let {
+            this.imagePlaceHolder = it
+            imageView?.setImageResource(it)
+        }
+        url?.let {
+            imageViews[imageView] = url
 
-        //Check image is stored in MemoryCache Map or not (see MemoryCache.java)
-        val bitmap: Bitmap? = MemoryCache[url]
-        if (bitmap != null) {
-            // if image is stored in MemoryCache Map then
-            // Show image in listview row
-            imageView?.setImageBitmap(bitmap)
-        } else {
-            //queue Photo to download from url
-            imageView?.let { queuePhoto(url, it) }
+            //Check image is stored in MemoryCache Map or not (see MemoryCache.java)
+            val bitmap: Bitmap? = MemoryCache[url]
+            if (bitmap != null) {
+                // if image is stored in MemoryCache Map then
+                // Show image in listview row
+                imageView?.setImageBitmap(bitmap)
+            } else {
+                //queue Photo to download from url
+                imageView?.let { queuePhoto(url, quality, it) }
 
-            //Before downloading image show default image
-            imageView?.setImageResource(imagePlaceHolder ?: 0)
+                imagePlaceHolder?.let {
+                    this.imagePlaceHolder = it
+                    imageView?.setImageResource(it)
+                }
+                //Before downloading image show default image
+            }
         }
     }
 
-    private fun queuePhoto(url: String, imageView: ImageView) {
+    private fun queuePhoto(url: String, quality: Int, imageView: ImageView) {
         // Store image and url in PhotoToLoad object
-        val p = PhotoToLoad(url, imageView)
+        val p = PhotoToLoad(url, quality, imageView)
 
         // pass PhotoToLoad object to PhotosLoader runnable class
         // and submit PhotosLoader runnable to executers to run runnable
@@ -71,7 +82,7 @@ class ImageLoader constructor(
     }
 
     //Task for the queue
-    class PhotoToLoad(var url: String, var imageView: ImageView)
+    inner class PhotoToLoad(var url: String, var quality: Int = 85, var imageView: ImageView)
 
     inner class PhotosLoader(private var photoToLoad: PhotoToLoad) : Runnable {
         override fun run() {
@@ -79,7 +90,7 @@ class ImageLoader constructor(
                 //Check if image already downloaded
                 if (imageViewReused(photoToLoad)) return
                 // download image from web url
-                val bmp: Bitmap? = getBitmap(photoToLoad.url)
+                val bmp: Bitmap? = getBitmap(photoToLoad.url, photoToLoad.quality)
 
                 // set image data in Memory Cache
                 bmp?.let { MemoryCache.put(photoToLoad.url, bmp) }
@@ -99,12 +110,12 @@ class ImageLoader constructor(
     }
 
     // @params @Created by Zeyad Alsayed
-    private fun getBitmap(url: String): Bitmap? {
+    private fun getBitmap(url: String, quality: Int): Bitmap? {
         val f = fileCache.getFile(url)
 
         //from SD cache
         //CHECK : if trying to decode file which not exist in cache return null
-        val b = decodeFile(f)
+        val b = decodeFile(f, quality)
         return b
             ?: try {
                 var bitmap: Bitmap? = null
@@ -128,7 +139,7 @@ class ImageLoader constructor(
 
                 //Now file created and going to resize file with defined height
                 // Decodes image and scales it to reduce memory consumption
-                bitmap = decodeFile(f)
+                bitmap = decodeFile(f, quality)
                 bitmap
             } catch (ex: Throwable) {
                 ex.printStackTrace()
@@ -138,7 +149,7 @@ class ImageLoader constructor(
     }
 
     //Decodes image and scales it to reduce memory consumption
-    private fun decodeFile(f: File?): Bitmap? {
+    private fun decodeFile(f: File?, quality: Int): Bitmap? {
         try {
             //Decode image size
             val o = BitmapFactory.Options()
@@ -148,12 +159,11 @@ class ImageLoader constructor(
             stream1.close()
 
             //Find the correct scale value. It should be the power of 2.
-            val mRequiredSize = 85
             var tmpWidth = o.outWidth
             var tmpHeight = o.outHeight
             var scale = 1
             while (true) {
-                if (tmpWidth / 2 < mRequiredSize || tmpHeight / 2 < mRequiredSize) break
+                if (tmpWidth / 2 < quality || tmpHeight / 2 < quality) break
                 tmpWidth /= 2
                 tmpHeight /= 2
                 scale *= 2

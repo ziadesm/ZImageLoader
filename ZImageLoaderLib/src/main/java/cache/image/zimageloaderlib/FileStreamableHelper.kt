@@ -1,4 +1,4 @@
-package cache.image.zimageloader
+package cache.image.zimageloaderlib
 
 import android.util.Log
 import java.io.InputStream

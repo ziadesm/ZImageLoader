@@ -1,4 +1,4 @@
-package cache.image.zimageloader
+package cache.image.zimageloaderlib
 
 import android.graphics.Bitmap
 import android.util.Log
@@ -24,7 +24,7 @@ object MemoryCache {
     private var size: Long = 0
 
     //max memory cache folder used to download images in bytes
-    private var limit: Long = 1000000
+    private var limit: Long = 1_000_000
 
     init {
         setLimit(Runtime.getRuntime().maxMemory() / 4)

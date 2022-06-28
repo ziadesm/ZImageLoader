@@ -1,8 +1,9 @@
-package cache.image.zimageloader
+package cache.image.zimageloaderlib
 
 import android.content.Context
 import android.os.Environment
 import android.os.Environment.isExternalStorageRemovable
+import cache.image.zimageloaderlib.singleton.SingletonHolder
 import java.io.File
 
 /*
@@ -13,7 +14,7 @@ import java.io.File
 *
 * @Created by Zeyad Alsayed
 * */
-class FileCache constructor(
+class FileCacheSingleton constructor(
     private val context: Context
 ) {
     /*
@@ -21,6 +22,10 @@ class FileCache constructor(
     * otherwise we gonna use cache directory in application data
     * with name ziadesm_image_cache_directory
     * */
+
+    companion object : SingletonHolder<FileCacheSingleton, Context>(::FileCacheSingleton)
+
+
     private val cacheDir: File by lazy {
         if (Environment.MEDIA_MOUNTED == Environment.getExternalStorageState() || !isExternalStorageRemovable())
             context.cacheDir ?: File(Environment.getExternalStorageDirectory(), "ziadesm_image_cache_directory")
